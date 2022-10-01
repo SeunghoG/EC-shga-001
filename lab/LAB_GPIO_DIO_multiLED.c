@@ -1,7 +1,7 @@
 /**
 ******************************************************************************
-* @author	your name
-* @Mod		date
+* @author	seungho_ga
+* @Mod		2022.10.02
 * @brief	Embedded Controller:  LAB Digital In/Out
 *					 - Toggle multiple LEDs by Button B1 pressing
 * 
