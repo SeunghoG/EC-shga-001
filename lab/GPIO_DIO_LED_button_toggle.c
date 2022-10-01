@@ -1,7 +1,7 @@
 /**
 ******************************************************************************
-* @author	your name
-* @Mod		date
+* @author	seungho ga
+* @Mod		2022.10.02
 * @brief	Embedded Controller:  LAB Digital In/Out
 *					 - Toggle multiple LEDs by Button B1 pressing
 * 
@@ -32,8 +32,6 @@ int main(void) {
 		if(but_val==0) 
 		{toggle(GPIOA, LED_PIN);
 		delay_ms(30);}
-		
-		
 	}
 }
 
