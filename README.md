@@ -19,11 +19,10 @@ This is a private github repository for Embedded Controller Class that contains 
 This repository contains
 
 * include : header and definition files of your own library
-
 * docs: documentation for your library
-
+  * report : Seung-Ho-Ga report
+  * HAL_documentatioin : My own library function declare and detail description
 * src: assignment source files for main(). Make it private.
-
 * lab-tutorial: exercise and tutorial files used in class ** \lab-student ** \lib-student ** \tutorial-student
 
 #### Environment
