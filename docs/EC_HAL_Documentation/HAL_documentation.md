@@ -645,7 +645,8 @@ void SysTick_init(void){
 	SysTick->VAL = 0;
 
 	// Enables SysTick exception request
-	SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;                  // 1 = counting down to zero asserts the                                                                            SysTick exception request
+    // 1 = counting down to zero asserts the SysTick exception request
+	SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;                  
 	
 	// Enable SysTick IRQ and SysTick Timer
 	SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
