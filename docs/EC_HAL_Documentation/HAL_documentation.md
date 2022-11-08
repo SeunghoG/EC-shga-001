@@ -694,3 +694,257 @@ uint32_t SysTick_val(void) {
 ```
 
 ## **ecTIM.c (Interrupt)**
+
+#### void TIM_init_usec()
+
+```c
+void TIM_init_usec(TIM_TypeDef* timerx, uint32_t usec){ 
+	
+// 1. Enable Timer CLOCK
+	if(timerx ==TIM1) RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+	else if(timerx ==TIM2) RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+	else if(timerx ==TIM3) RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+	else if(timerx ==TIM4) RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
+	else if(timerx ==TIM5) RCC->APB1ENR |= RCC_APB1ENR_TIM5EN;
+	else if(timerx ==TIM9)  RCC->APB2ENR |= RCC_APB2ENR_TIM9EN ;
+  	else if(timerx ==TIM10) RCC->APB2ENR |= RCC_APB2ENR_TIM10EN;
+  	else if(timerx ==TIM11) RCC->APB2ENR |= RCC_APB2ENR_TIM11EN;
+	
+// 2. Set CNT period
+	TIM_period_us(timerx,usec); 
+		
+// 3. CNT Direction
+	timerx->CR1= TIM_CR1_DIR;		// Upcounter	
+	
+// 4. Enable Timer Counter
+	timerx->CR1 |= TIM_CR1_CEN;		
+}
+```
+
+#### void TIM_init_msec()
+
+```c
+void TIM_init_msec(TIM_TypeDef* timerx, uint32_t msec){ 
+	
+// 1. Enable Timer CLOCK
+	if(timerx ==TIM1) RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+	else if(timerx ==TIM2) RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+	else if(timerx ==TIM3) RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+	else if(timerx ==TIM4) RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
+	else if(timerx ==TIM5) RCC->APB1ENR |= RCC_APB1ENR_TIM5EN;
+	else if(timerx ==TIM9)  RCC->APB2ENR |= RCC_APB2ENR_TIM9EN ;
+  	else if(timerx ==TIM10) RCC->APB2ENR |= RCC_APB2ENR_TIM10EN;
+  	else if(timerx ==TIM11) RCC->APB2ENR |= RCC_APB2ENR_TIM11EN;
+	
+// 2. Set CNT period
+	TIM_period_ms(timerx,msec); 
+		
+// 3. CNT Direction
+	timerx->CR1= TIM_CR1_DIR;		// Upcounter	
+	
+// 4. Enable Timer Counter
+	timerx->CR1 |= TIM_CR1_CEN;		
+}
+```
+
+#### void TIM_period_us()
+
+```c
+void TIM_period_us(TIM_TypeDef *TIMx, uint32_t usec){   
+	// Period usec = 1 to 1000
+
+	//16bit: 0~65000 
+	//32bit: 0~4,294,967,295
+	// 1us(1MHz, ARR=1) to 65msec (ARR=0xFFFF)
+	uint32_t prescaler = 84;  //1[MHz]=1[us]
+	uint32_t ARRval= usec;  // 84MHz/1000000 us
+	
+	TIMx->PSC = prescaler-1;					
+	TIMx->ARR = ARRval-1;					
+}
+```
+
+#### void TIM_period_ms()
+
+```c
+void TIM_period_ms(TIM_TypeDef* TIMx, uint32_t msec){ 
+	// Period msec = 1 to 6000
+	// 0.1ms(10kHz, ARR=1) to 6.5sec (ARR=0xFFFF)
+	uint32_t prescaler = 8400; //10[kHz]=0.1[ms]
+	uint16_t ARRval=10*msec;  			// 84MHz/1000ms
+
+	TIMx->PSC = prescaler-1;					
+	TIMx->ARR = ARRval-1;							
+}
+```
+
+#### void TIM_INT_init_usec()
+
+```c
+void TIM_INT_init_usec(TIM_TypeDef* timerx, uint32_t usec){
+// 1. Initialize Timer	
+	TIM_init_usec(timerx,usec);
+	
+// 2. Enable Update Interrupt
+	TIM_INT_enable(timerx);
+	
+// 3. NVIC Setting
+	uint32_t IRQn_reg =0;
+	if(timerx ==TIM1)       IRQn_reg = TIM1_UP_TIM10_IRQn;
+	else if(timerx ==TIM2)  IRQn_reg = TIM2_IRQn;
+	else if(timerx ==TIM3)  IRQn_reg = TIM3_IRQn;
+	else if(timerx ==TIM4)  IRQn_reg = TIM4_IRQn;
+	else if(timerx ==TIM5)  IRQn_reg = TIM5_IRQn;
+	else if(timerx ==TIM9)  IRQn_reg = TIM1_BRK_TIM9_IRQn;
+  	else if(timerx ==TIM10) IRQn_reg = TIM1_UP_TIM10_IRQn;
+  	else if(timerx ==TIM11) IRQn_reg = TIM1_TRG_COM_TIM11_IRQn;
+	
+	NVIC_EnableIRQ(IRQn_reg);				
+	NVIC_SetPriority(IRQn_reg,2);
+}
+```
+
+#### void TIM_INT_init_msec()
+
+```c
+void TIM_INT_init_msec(TIM_TypeDef* timerx, uint32_t msec){
+// 1. Initialize Timer	
+	TIM_init_msec(timerx,msec);
+	
+// 2. Enable Update Interrupt
+	TIM_INT_enable(timerx);
+	
+// 3. NVIC Setting
+	uint32_t IRQn_reg =0;
+	if(timerx ==TIM1)       IRQn_reg = TIM1_UP_TIM10_IRQn;
+	else if(timerx ==TIM2)  IRQn_reg = TIM2_IRQn;
+	else if(timerx ==TIM3)  IRQn_reg = TIM3_IRQn;
+	else if(timerx ==TIM4)  IRQn_reg = TIM4_IRQn;
+	else if(timerx ==TIM5)  IRQn_reg = TIM5_IRQn;
+	else if(timerx ==TIM9)  IRQn_reg = TIM1_BRK_TIM9_IRQn;
+  	else if(timerx ==TIM10) IRQn_reg = TIM1_UP_TIM10_IRQn;
+  	else if(timerx ==TIM11) IRQn_reg = TIM1_TRG_COM_TIM11_IRQn;
+	
+	
+	NVIC_EnableIRQ(IRQn_reg);				
+	NVIC_SetPriority(IRQn_reg,2);
+}
+```
+
+#### void TIM_INT_enable()
+
+```c
+void TIM_INT_enable(TIM_TypeDef* timerx){
+	timerx->DIER |=1<<0;			// Enable Timer Update Interrupt		
+}
+```
+
+#### void TIM_INT_disable()
+
+```c
+void TIM_INT_disable(TIM_TypeDef* timerx){
+	timerx->DIER &= ~(1<<0);				// Disable Timer Update Interrupt
+}
+```
+
+#### uint32_t is_UIF()
+
+```c
+uint32_t is_UIF(TIM_TypeDef *TIMx){
+	return ((TIMx->SR &TIM_SR_UIF)==TIM_SR_UIF);
+}
+```
+
+#### void clear_UIF()
+
+```c
+void clear_UIF(TIM_TypeDef *TIMx){
+	TIMx->SR &= ~TIM_SR_UIF;
+}
+```
+
+## **ecPWM.c (Interrupt)**
+
+#### void PWM_init()
+
+```c
+void PWM_init(PWM_t *pwm, GPIO_TypeDef *port, int pin){
+// 0. Match Output Port and Pin for TIMx 	
+		pwm->port = port;
+		pwm->pin  = pin;
+	
+		PWM_pinmap(pwm);
+		TIM_TypeDef *TIMx = pwm->timer;
+		int CHn = pwm->ch;	
+		
+// 1. Initialize GPIO port and pin as AF // initialize in main source code
+		
+		GPIO_init(port, pin,AF);  // AF=2
+		GPIO_ospeed(port, pin,3UL);  // speed VHIGH=3 
+		GPIO_otype(port, pin, 0UL);  // push-pull
+		GPIO_pupd(port, pin, 0UL);
+// 2. Configure GPIO AFR by Pin num.				
+	//  AFR[0] for pin: 0~7,     AFR[1] for pin 8~15
+	//  AFR=1 for TIM1,TIM2	AFR=2 for TIM3 etc
+		 uint16_t AFx = 0;
+	
+		if ((TIMx == TIM1) || (TIMx == TIM2)) { AFx = 1UL;}
+    else if ((TIMx == TIM3) || (TIMx == TIM4) || (TIMx == TIM5)) { AFx = 2UL; }
+    else if ((TIMx == TIM9) || (TIMx == TIM10) || (TIMx == TIM11)) { AFx = 3UL; }
+
+    // ? ??? AFR ??? ???? ?? ???
+    port->AFR[pin/8] &= ~(0xFUL << (4*(pin%8)));        // 4 bit clear AFRx
+    port->AFR[pin/8] |= AFx << (4*(pin%8)); 
+			
+// 3. Initialize Timer 
+		TIM_init_msec(TIMx, 1);	// with default msec=1 value.	
+		 
+		TIMx->CR1 &= ~TIM_CR1_CEN;	// disable counter
+// 3-2. Direction of Counter
+		TIMx->CR1 &= ~TIM_CR1_DIR;    // Counting direction: 0 = up-counting, 1 = down-counting
+	
+			
+// 4. Configure Timer Output mode as PWM
+	uint32_t ccVal=TIMx->ARR/2;  // default value  CC=ARR/2
+	if(CHn == 1){
+		TIMx->CCMR1 &= ~TIM_CCMR1_OC1M;                     // Clear ouput compare mode bits for channel 1
+		TIMx->CCMR1 |= TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2; 												// OC1M = 110 for PWM Mode 1 output on ch1. #define TIM_CCMR1_OC1M_1          (0x2UL << TIM_CCMR1_OC1M_Pos)
+		TIMx->CCMR1	|= TIM_CCMR1_OC1PE;                     // Output 1 preload enable (make CCR1 value changable)
+		TIMx->CCR1  = ccVal; 																// Output Compare Register for channel 1 (default duty ratio = 50%)		
+		TIMx->CCER &= ~TIM_CCER_CC1P;                       // select output polarity: active high	
+		TIMx->CCER  |= TIM_CCER_CC1E;												// Enable output for ch1
+	}
+	else if(CHn == 2){
+		TIMx->CCMR1 &= ~TIM_CCMR1_OC2M;                     // Clear ouput compare mode bits for channel 2
+		TIMx->CCMR1 |= TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2; // OC1M = 110 for PWM Mode 1 output on ch2
+		TIMx->CCMR1	|= TIM_CCMR1_OC2PE;                     // Output 1 preload enable (make CCR2 value changable)	
+		TIMx->CCR2  = ccVal; 															  // Output Compare Register for channel 2 (default duty ratio = 50%)		
+		TIMx->CCER &= ~TIM_CCER_CC1P;                       // select output polarity: active high	
+		TIMx->CCER  |= TIM_CCER_CC2E;												// Enable output for ch2
+	}
+	else if(CHn == 3){
+		TIMx->CCMR2 &= ~TIM_CCMR2_OC3M;                     // Clear ouput compare mode bits for channel 3
+		TIMx->CCMR2 |= TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2; 															// OC1M = 110 for PWM Mode 1 output on ch3
+		TIMx->CCMR2	|= TIM_CCMR2_OC3PE;                     					// Output 1 preload enable (make CCR3 value changable)	
+		TIMx->CCR3	= ccVal; 															// Output Compare Register for channel 3 (default duty ratio = 50%)		
+		TIMx->CCER &= ~TIM_CCER_CC1P;                       				// select output polarity: active high	
+		TIMx->CCER |= TIM_CCER_CC3E;															// Enable output for ch3
+	}
+	else if(CHn == 4){
+		TIMx->CCMR2 &= ~TIM_CCMR2_OC4M;
+		TIMx->CCMR2 |= TIM_CCMR2_OC4M_1 | TIM_CCMR2_OC4M_2;
+		TIMx->CCMR2	|= TIM_CCMR2_OC4PE;
+		TIMx->CCR3	= ccVal;
+		TIMx->CCER &= ~TIM_CCER_CC1P;
+		TIMx->CCER |= TIM_CCER_CC4E;
+	}	
+	
+	
+	
+// 5. Enable Timer Counter
+	if(TIMx == TIM1) TIMx->BDTR |= TIM_BDTR_MOE;					// Main output enable (MOE): 0 = Disable, 1 = Enable	
+	TIMx->CR1  |= TIM_CR1_CEN;  													// Enable counter
+}
+
+```
+
