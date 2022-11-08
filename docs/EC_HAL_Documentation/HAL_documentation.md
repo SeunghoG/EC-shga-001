@@ -863,6 +863,220 @@ void clear_UIF(TIM_TypeDef *TIMx){
 }
 ```
 
+#### void ICAP_init()
+
+```c
+void ICAP_init(IC_t *ICx, GPIO_TypeDef *port, int pin){
+// 0. Match Input Capture Port and Pin for TIMx
+	ICx->port = port;
+	ICx->pin  = pin;
+	ICAP_pinmap(ICx);	  										// Port, Pin --(mapping)--> TIMx, Channel
+	
+	TIM_TypeDef *TIMx = ICx->timer;
+	int TIn = ICx->ch; 		
+	int ICn = TIn;
+	ICx->ICnum = ICn;													// (default) TIx=ICx
+
+// GPIO configuration ---------------------------------------------------------------------	
+// 1. Initialize GPIO port and pin as AF
+	GPIO_init(port, pin, 2UL);  							// GPIO init as AF=2
+	GPIO_ospeed(port, pin, 3UL);  						// speed VHIGH=3	
+	GPIO_pupd(port,pin,0UL);
+
+// 2. Configure GPIO AFR by Pin num.
+	if(TIMx == TIM1 || TIMx == TIM2)											 port->AFR[pin >> 3] |= 0x01 << (4*(pin % 8)); // TIM1~2
+	else if  ((TIMx == TIM3) || (TIMx == TIM4) || (TIMx == TIM5)) port->AFR[pin >> 3] |= 0x02 << (4*(pin % 8));  // TIM3~5
+	else if  ((TIMx == TIM9) || (TIMx == TIM10) || (TIMx == TIM11)) port->AFR[pin >> 3] |= 0x03 << (4*(pin % 8));  // TIM9~11
+
+	
+// TIMER configuration ---------------------------------------------------------------------			
+// 1. Initialize Timer 
+	TIM_init_usec(TIMx, 100);
+// 2. Initialize Timer Interrpt 
+	TIM_INT_init_usec(TIMx, 100);        					// TIMx Interrupt initialize 
+// 3. Modify ARR Maxium for 1MHz
+	TIMx->PSC = 84-1;						  					// Timer counter clock: 1MHz(1us)  for PLL
+	TIMx->ARR = 0xFFFF;											// Set auto reload register to maximum (count up to 65535)
+// 4. Disable Counter during configuration
+	TIMx->CR1 &= ~TIM_CR1_CEN;  						// Disable Counter during configuration
+	
+// Input Capture configuration ---------------------------------------------------------------------			
+// 1. Select Timer channel(TIx) for Input Capture channel(ICx)
+	// Default Setting
+	TIMx->CCMR1 &= 	~TIM_CCMR1_CC1S;
+	TIMx->CCMR1 &=	~TIM_CCMR1_CC2S;
+	TIMx->CCMR2 &=	~TIM_CCMR2_CC3S;
+	TIMx->CCMR2 &=	~TIM_CCMR2_CC4S;
+	
+	TIMx->CCMR1 |= 	TIM_CCMR1_CC1S_0;      					//01<<0   CC1S    TI1=IC1
+	TIMx->CCMR1 |= 	TIM_CCMR1_CC2S_0;  				     	//01<<8   CC2s    TI2=IC2
+	TIMx->CCMR2 |= 	TIM_CCMR2_CC3S_0;        				//01<<0   CC3s    TI3=IC3
+	TIMx->CCMR2 |= 	TIM_CCMR2_CC4S_0;  							//01<<8   CC4s    TI4=IC4
+
+
+// 2.Filter Duration (use default)
+
+// 3.IC Prescaler (use default)
+
+// 4.Activation Edge: CCyNP/CCyP	
+	TIMx->CCER &= ~(15UL<<4*(ICn-1)) 	;					// CCy(Rising) for ICn
+	TIMx->CCER &= ~(5UL<<(((ICn-1)*4)+1));
+	
+// 5.Enable CCy Capture, Capture/Compare interrupt
+	TIMx->CCER |= 1UL<<4*(ICn-1);					// CCn(ICn) Capture Enable	
+
+// 6.Enable Interrupt of CC(CCyIE), Update (UIE)
+	TIMx->DIER |= 1UL<<ICn;					// Capture/Compare Interrupt Enable	for ICn
+	TIMx->DIER |= TIM_DIER_UIE;							// Update Interrupt enable	
+
+// 7.Enable Counter 
+	TIMx->CR1	 |= TIM_CR1_CEN;							// Counter enable	
+}
+```
+
+#### void ICAP_setup()
+
+```c
+void ICAP_setup(IC_t *ICx, int ICn, int edge_type){
+	TIM_TypeDef *TIMx = ICx->timer;	// TIMx
+	int 				CHn 	= ICx->ch;		// Timer Channel CHn
+	ICx->ICnum = ICn;
+
+// Disable  CC. Disable CCInterrupt for ICn. 
+	TIMx->CCER &= ~(1UL<<4*(ICn-1));															// Capture Disable
+	TIMx->DIER &= ~(1UL<<ICn);															// CCn Interrupt Disable	
+	
+	
+// Configure  IC number(user selected) with given IC pin(TIMx_CHn)
+	switch(ICn){
+			case 1:
+					TIMx->CCMR1 &= ~TIM_CCMR1_CC1S;											//reset   CC1S
+					if (ICn==CHn) TIMx->CCMR1 |= 	TIM_CCMR1_CC1S_0;     //01<<0   CC1S    Tx_Ch1=IC1
+					else TIMx->CCMR1 |= TIM_CCMR1_CC1S_1;      											//10<<0   CC1S    Tx_Ch2=IC1
+					break;
+			case 2:
+					TIMx->CCMR1 &= ~TIM_CCMR1_CC2S;										//reset   CC2S
+					if (ICn==CHn) TIMx->CCMR1 |= TIM_CCMR1_CC2S_0;     	//01<<0   CC2S    Tx_Ch2=IC2
+					else TIMx->CCMR1 |= TIM_CCMR1_CC2S_1;     											//10<<0   CC2S    Tx_Ch1=IC2
+					break;
+			case 3:
+					TIMx->CCMR2 &= ~TIM_CCMR2_CC3S;											//reset   CC3S
+					if (ICn==CHn) TIMx->CCMR2 |= TIM_CCMR2_CC3S_0;	    //01<<0   CC3S    Tx_Ch3=IC3
+					else TIMx->CCMR2 |= TIM_CCMR2_CC3S_1;		     				//10<<0   CC3S    Tx_Ch4=IC3
+					break;
+			case 4:
+					TIMx->CCMR2 &= ~TIM_CCMR2_CC4S;										//reset   CC4S
+					if (ICn==CHn) TIMx->CCMR2 |= TIM_CCMR2_CC4S_0;	   						  //01<<0   CC4S    Tx_Ch4=IC4
+					else TIMx->CCMR2 |= TIM_CCMR2_CC4S_1;	     					//10<<0   CC4S    Tx_Ch3=IC4
+					break;
+			default: break;
+		}
+
+
+// Configure Activation Edge direction
+	TIMx->CCER &= ~(5<<((4*(ICn-1))+1));	  									// Clear CCnNP/CCnP bits for ICn
+	switch(edge_type){
+		case IC_RISE: TIMx->CCER &= ~(5<<((4*(ICn-1))+1));	 break; //rising:  00
+		case IC_FALL: TIMx->CCER |= (1<<((4*(ICn-1))+1));	 break; //falling: 01
+		case IC_BOTH: TIMx->CCER |= (1<<((4*(ICn-1))+1));	 break; //both:    11
+	}
+	
+// Enable CC. Enable CC Interrupt. 
+	TIMx->CCER |= 1 << (4*(ICn - 1)); 										// Capture Enable
+	TIMx->DIER |= 1 << ICn; 															// CCn Interrupt enabled	
+}
+
+```
+
+#### void ICAP_counter_us()
+
+```c
+void ICAP_counter_us(IC_t *ICx, int usec){	
+	TIM_TypeDef *TIMx = ICx->timer;	
+	TIMx->PSC = 84*usec-1;						  // Timer counter clock: 1us * usec
+	TIMx->ARR = 0xFFFF;									// Set auto reload register to maximum (count up to 65535)
+}
+```
+
+#### uint32_t is_CCIF()
+
+```c
+uint32_t is_CCIF(TIM_TypeDef *TIMx, uint32_t ccNum){
+	switch(ccNum){
+	case 1 : return ((TIMx->SR & TIM_SR_CC1IF) == TIM_SR_CC1IF); 	break;
+    case 2 : return ((TIMx->SR & TIM_SR_CC2IF) == TIM_SR_CC2IF); 	break;
+    case 3 : return ((TIMx->SR & TIM_SR_CC3IF) == TIM_SR_CC3IF); 	break;
+    case 4 : return ((TIMx->SR & TIM_SR_CC4IF) == TIM_SR_CC4IF); 	break;
+  }
+}
+```
+
+#### void clear_CCIF()
+
+```c
+void clear_CCIF(TIM_TypeDef *TIMx, uint32_t ccNum){
+	switch(ccNum){
+    case 1 : TIMx->SR &= ~TIM_SR_CC1IF; break;
+    case 2 : TIMx->SR &= ~TIM_SR_CC2IF;	break;
+    case 3 : TIMx->SR &= ~TIM_SR_CC3IF; break;
+    case 4 : TIMx->SR &= ~TIM_SR_CC4IF;	break;
+  }
+}
+```
+
+#### void ICAP_pinmap()
+
+```c
+//DO NOT MODIFY THIS
+void ICAP_pinmap(IC_t *timer_pin){
+   GPIO_TypeDef *port = timer_pin->port;
+   int pin = timer_pin->pin;
+   
+   if(port == GPIOA) {
+      switch(pin){
+         case 0 : timer_pin->timer = TIM2; timer_pin->ch = 1; break;
+         case 1 : timer_pin->timer = TIM2; timer_pin->ch = 2; break;
+         case 5 : timer_pin->timer = TIM2; timer_pin->ch = 1; break;
+         case 6 : timer_pin->timer = TIM3; timer_pin->ch = 1; break;
+         //case 7: timer_pin->timer = TIM1; timer_pin->ch = 1N; break;
+         case 8 : timer_pin->timer = TIM1; timer_pin->ch = 1; break;
+         case 9 : timer_pin->timer = TIM1; timer_pin->ch = 2; break;
+         case 10: timer_pin->timer = TIM1; timer_pin->ch = 3; break;
+         case 15: timer_pin->timer = TIM2; timer_pin->ch = 1; break;
+         default: break;
+      }         
+   }
+   else if(port == GPIOB) {
+      switch(pin){
+         //case 0: timer_pin->timer = TIM1; timer_pin->ch = 2N; break;
+         //case 1: timer_pin->timer = TIM1; timer_pin->ch = 3N; break;
+         case 3 : timer_pin->timer = TIM2; timer_pin->ch = 2; break;
+         case 4 : timer_pin->timer = TIM3; timer_pin->ch = 1; break;
+         case 5 : timer_pin->timer = TIM3; timer_pin->ch = 2; break;
+         case 6 : timer_pin->timer = TIM4; timer_pin->ch = 1; break;
+         case 7 : timer_pin->timer = TIM4; timer_pin->ch = 2; break;
+         case 8 : timer_pin->timer = TIM4; timer_pin->ch = 3; break;
+         case 9 : timer_pin->timer = TIM4; timer_pin->ch = 3; break;
+         case 10: timer_pin->timer = TIM2; timer_pin->ch = 3; break;
+         
+         default: break;
+      }
+   }
+   else if(port == GPIOC) {
+      switch(pin){
+         case 6 : timer_pin->timer = TIM3; timer_pin->ch = 1; break;
+         case 7 : timer_pin->timer = TIM3; timer_pin->ch = 2; break;
+         case 8 : timer_pin->timer = TIM3; timer_pin->ch = 3; break;
+         case 9 : timer_pin->timer = TIM3; timer_pin->ch = 4; break;
+         
+         default: break;
+      }
+   }
+}
+```
+
+
+
 ## **ecPWM.c (Interrupt)**
 
 #### void PWM_init()
@@ -946,5 +1160,317 @@ void PWM_init(PWM_t *pwm, GPIO_TypeDef *port, int pin){
 	TIMx->CR1  |= TIM_CR1_CEN;  													// Enable counter
 }
 
+```
+
+#### void PWM_period_ms()
+
+```c
+void PWM_period_ms(PWM_t *pwm, uint32_t msec){
+	TIM_TypeDef *TIMx = pwm->timer;
+	TIM_period_ms(TIMx, msec); 
+}
+```
+
+#### void PWM_period_us()
+
+```c
+void PWM_period_us(PWM_t *pwm, uint32_t usec){
+	TIM_TypeDef *TIMx = pwm->timer;
+	TIM_period_us(TIMx, usec);
+}
+```
+
+#### void PWM_pulsewidth_ms()
+
+```c
+void PWM_pulsewidth_ms(PWM_t *pwm, float pulse_width_ms){ 
+	int CHn = pwm->ch;
+	uint32_t fsys = 0;
+	uint32_t psc = pwm->timer->PSC;
+	
+	// Check System CLK: PLL or HSI
+	if((RCC->CFGR & (3<<0)) == 2)      { fsys = 84000; }  // for msec 84MHz/1000
+	else if((RCC->CFGR & (3<<0)) == 0) { fsys = 16000; }
+	
+	float fclk = fsys/(psc+1.0);					// fclk=fsys/(psc+1);
+	uint32_t ccval = pulse_width_ms *fclk - 1;
+	
+	switch(CHn){
+		case 1: pwm->timer->CCR1 = ccval; break;
+		case 2: pwm->timer->CCR2 = ccval; break;
+		case 3: pwm->timer->CCR3 = ccval; break;
+		case 4: pwm->timer->CCR4 = ccval; break;
+		default: break;
+	}
+}
+void PWM_pulsewidth_us(PWM_t *pwm, float pulse_
+```
+
+#### void PWM_pulsewidth_us()
+
+```c
+void PWM_pulsewidth_us(PWM_t *pwm, float pulse_width_us){ 
+	TIM_TypeDef *TIMx = pwm->timer;
+	
+	int CHn = pwm->ch;
+	uint32_t fsys = 0;
+	uint32_t psc  = pwm->timer->PSC;
+	
+	// Check System CLK: PLL or HSI
+	if((RCC->CFGR & (3<<0)) == 2)      { fsys = 84; }
+	else if((RCC->CFGR & (3<<0)) == 0) { fsys = 16; }
+	
+	float fclk     = (float) (fsys/(psc+1.0));			    // fclk = fsys/(psc+1);
+	uint32_t ccval = pulse_width_us*fclk-1;   // width_ms *fclk;
+	
+	switch(CHn){
+		case 1: TIMx->CCR1 = ccval; break;
+		case 2: TIMx->CCR2 = ccval; break;
+		case 3: TIMx->CCR3 = ccval; break;
+		case 4: TIMx->CCR4 = ccval; break;
+		default: break;
+	}
+}
+```
+
+#### void PWM_duty()
+
+```c
+void PWM_duty(PWM_t *pwm, float duty) {                         //duty=0 to 1	
+	float ccval = (pwm->timer->ARR+1)*duty-1;    				//(ARR+1)*dutyRatio - 1 		         
+	int CHn = pwm->ch;
+  	
+	switch(CHn){
+		case 1: pwm->timer->CCR1 = ccval; break;
+		case 2: pwm->timer->CCR2 = ccval; break;
+		case 3: pwm->timer->CCR3 = ccval; break;
+		case 4: pwm->timer->CCR4 = ccval; break;
+		default: break;
+	}
+}
+```
+
+#### void PWM_pinmap()
+
+```c
+// DO NOT MODIFY HERE
+void PWM_pinmap(PWM_t *pwm){
+   GPIO_TypeDef *port = pwm->port;
+   int pin = pwm->pin;
+   
+   if(port == GPIOA) {
+      switch(pin){
+         case 0 : pwm->timer = TIM2; pwm->ch = 1; break;
+         case 1 : pwm->timer = TIM2; pwm->ch = 2; break;
+         case 5 : pwm->timer = TIM2; pwm->ch = 1; break;
+         case 6 : pwm->timer = TIM3; pwm->ch = 1; break;
+         //case 7: PWM_pin->timer = TIM1; PWM_pin->ch = 1N; break;
+         case 8 : pwm->timer = TIM1; pwm->ch = 1; break;
+         case 9 : pwm->timer = TIM1; pwm->ch = 2; break;
+         case 10: pwm->timer = TIM1; pwm->ch = 3; break;
+         case 15: pwm->timer = TIM2; pwm->ch = 1; break;
+         default: break;
+      }         
+   }
+   else if(port == GPIOB) {
+      switch(pin){
+         //case 0: PWM_pin->timer = TIM1; PWM_pin->ch = 2N; break;
+         //case 1: PWM_pin->timer = TIM1; PWM_pin->ch = 3N; break;
+         case 3 : pwm->timer = TIM2; pwm->ch = 2; break;
+         case 4 : pwm->timer = TIM3; pwm->ch = 1; break;
+         case 5 : pwm->timer = TIM3; pwm->ch = 2; break;
+         case 6 : pwm->timer = TIM4; pwm->ch = 1; break;
+         case 7 : pwm->timer = TIM4; pwm->ch = 2; break;
+         case 8 : pwm->timer = TIM4; pwm->ch = 3; break;
+         case 9 : pwm->timer = TIM4; pwm->ch = 4; break;
+         case 10: pwm->timer = TIM2; pwm->ch = 3; break;
+         default: break;
+      }
+   }
+   else if(port == GPIOC) {
+      switch(pin){
+         case 6 : pwm->timer = TIM3; pwm->ch = 1; break;
+         case 7 : pwm->timer = TIM3; pwm->ch = 2; break;
+         case 8 : pwm->timer = TIM3; pwm->ch = 3; break;
+         case 9 : pwm->timer = TIM3; pwm->ch = 4; break;
+         
+         default: break;
+      }
+   }
+	 // TIM5 needs to be added, if used.
+}
+```
+
+#### int update_dir()
+
+```c
+int update_dir(int dir, uint8_t idx){
+	if(idx%19 == 0) dir *=-1;
+	return dir;
+}
+```
+
+## **ecStepper.c**
+
+#### structure define / state define
+
+```c
+//State number 
+#define S0 0
+#define S1 1
+#define S2 2
+#define S3 3
+#define S4 4
+#define S5 5
+#define S6 6
+#define S7 7
+
+// Stepper Motor function
+uint32_t step_per_rev = 64*32;
+uint32_t step_delay = 60000/(2048*2);
+	 
+// Stepper Motor variable
+volatile Stepper_t myStepper; 
+
+//FULL stepping sequence  - FSM
+typedef struct {
+	uint8_t out;
+  uint32_t next[2];
+} State_full_t;
+
+State_full_t FSM_full[4] = {  
+ {0b1100,{S1,S3}},
+ {0b0110,{S2,S0}},
+ {0b0011,{S3,S1}},
+ {0b1001,{S0,S2}}
+};
+
+//HALF stepping sequence
+typedef struct {
+	uint8_t out;
+  uint32_t next[2];
+} State_half_t;
+
+State_half_t FSM_half[8] = { 
+ {0b1000,{S1,S7}},
+ {0b1100,{S2,S0}},
+ {0b0100,{S3,S1}},
+ {0b0110,{S4,S2}},
+ {0b0010,{S5,S3}},
+ {0b0011,{S6,S4}},
+ {0b0001,{S7,S5}},
+ {0b1001,{S0,S6}},
+};
+
+```
+
+#### void Stepper_init()
+
+```c
+void Stepper_init(GPIO_TypeDef* port1, int pin1, GPIO_TypeDef* port2, int pin2, GPIO_TypeDef* port3, int pin3, GPIO_TypeDef* port4, int pin4){
+	 
+//  GPIO Digital Out Initiation 
+	 
+	 //port1 = PB10
+	 myStepper.port1 = port1;
+   myStepper.pin1  = pin1;
+	 //port2 = PB4
+	 myStepper.port2 = port2;
+   myStepper.pin2  = pin2;
+	 //port3 = PB5
+	 myStepper.port3 = port3;
+   myStepper.pin3  = pin3;
+	 //port4 = PB3
+	 myStepper.port4 = port4;
+   myStepper.pin4  = pin4;
+	
+	
+//  GPIO Digital Out Initiation
+		// No pull-up Pull-down , Push-Pull, Fast	
+		// Port1,Pin1 ~ Port4,Pin4
+		GPIO_init(GPIOB, PB10, OUTPUT);
+		GPIO_otype(GPIOB,PB10, 0UL);       // 0:Push-Pull
+		GPIO_pupd(GPIOB,PB10, 0UL);        // 00: no Pull-up/ pull-down 
+		GPIO_ospeed(GPIOB,PB10, 2UL);      // 01:Fast Speed
+		
+		GPIO_init(GPIOB, PB4, OUTPUT);
+		GPIO_otype(GPIOB,PB4, 0UL);       // 0:Push-Pull
+		GPIO_pupd(GPIOB,PB4, 0UL);        // 00: no Pull-up/ pull-down 
+		GPIO_ospeed(GPIOB,PB4, 2UL);      // 01:Fast Speed
+		
+		GPIO_init(GPIOB, PB5, OUTPUT);
+		GPIO_otype(GPIOB,PB5, 0UL);       // 0:Push-Pull
+		GPIO_pupd(GPIOB,PB5, 0UL);        // 00: no Pull-up/ pull-down 
+		GPIO_ospeed(GPIOB,PB5, 2UL);      // 01:Fast Speed
+		
+		GPIO_init(GPIOB, PB3, OUTPUT);
+		GPIO_otype(GPIOB,PB3, 0UL);       // 0:Push-Pull
+		GPIO_pupd(GPIOB,PB3, 0UL);        // 00: no Pull-up/ pull-down 
+		GPIO_ospeed(GPIOB,PB3, 2UL);      // 01:Fast Speed
+	
+}
+```
+
+#### void Stepper_pinOut ()
+
+```c
+void Stepper_pinOut (uint32_t state, int mode){
+	   if (mode == FULL){         // FULL mode
+			 GPIO_write(myStepper.port1, myStepper.pin1, ( (FSM_full[state].out)>>3)&1 );
+  		 GPIO_write(myStepper.port2, myStepper.pin2, ( (FSM_full[state].out)>>2)&1 );
+			 GPIO_write(myStepper.port3, myStepper.pin3, ( (FSM_full[state].out)>>1)&1 );
+			 GPIO_write(myStepper.port4, myStepper.pin4, ( (FSM_full[state].out)>>0)&1 );
+			}	 
+		 else if (mode == HALF){    // HALF mode
+			 GPIO_write(myStepper.port1, myStepper.pin1, ( (FSM_half[state].out)>>3)&1 );
+  		 GPIO_write(myStepper.port2, myStepper.pin2, ( (FSM_half[state].out)>>2)&1 );
+			 GPIO_write(myStepper.port3, myStepper.pin3, ( (FSM_half[state].out)>>1)&1 );
+			 GPIO_write(myStepper.port4, myStepper.pin4, ( (FSM_half[state].out)>>0)&1 );
+			}
+}
+```
+
+#### void Stepper_setSpeed ()
+
+```c
+void Stepper_setSpeed (long whatSpeed){      // rppm
+		uint32_t step_delay = 	60000/(2048*whatSpeed); 
+}
+```
+
+#### void Stepper_step()
+
+```c
+void Stepper_step(int steps, int direction, int mode){
+	 uint32_t state = 0;
+	 
+	myStepper._step_num = steps;
+	
+	 for(; myStepper._step_num > 0; myStepper._step_num--){ // run for step size
+				                                		// delay (step_delay); 
+		    if (mode == FULL){	
+					  delay_ms(step_delay); 
+						state = FSM_full[state].next[direction];// YOUR CODE       // state = next state
+				}
+				else if (mode == HALF){
+						delay_ms(step_delay/2);
+						state = FSM_half[state].next[direction];// YOUR CODE       // state = next state
+				}
+				Stepper_pinOut(state, mode);
+   }
+}
+```
+
+#### void Stepper_stop ()
+
+```c
+void Stepper_stop (void){ 
+      // All pins(Port1~4, Pin1~4) set as DigitalOut '0'
+    	myStepper._step_num = 0;    
+		GPIO_write(myStepper.port1, myStepper.pin1, myStepper._step_num);
+		GPIO_write(myStepper.port2, myStepper.pin2, myStepper._step_num);
+		GPIO_write(myStepper.port3, myStepper.pin3, myStepper._step_num);
+		GPIO_write(myStepper.port4, myStepper.pin4, myStepper._step_num);
+}
 ```
 
